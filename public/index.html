@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown 文档服务</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/vendor/katex/katex.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-heading">
+                    <div class="title">本地文档管理</div>
+                    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-controls="sidebar" aria-expanded="true">
+                        <span aria-hidden="true">‹</span>
+                    </button>
+                </div>
+                <input type="text" id="search-input" placeholder="Search files...">
+            </div>
+            <div id="file-tree"></div>
+        </div>
+        <div class="resizer" id="drag-resizer"></div>
+        <div class="content">
+            <div class="content-toolbar">
+                <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="Open document menu" aria-controls="sidebar" aria-expanded="false">
+                    <span aria-hidden="true">☰</span><span class="mobile-menu-label">菜单</span>
+                </button>
+                <button class="content-sidebar-toggle" id="content-sidebar-toggle" type="button" aria-label="Expand sidebar" aria-controls="sidebar" aria-expanded="false">
+                    <span aria-hidden="true">›</span>
+                </button>
+                <div id="tabs" class="tabs" role="tablist" aria-label="打开 本地文档管理"></div>
+            </div>
+            <div id="markdown-content">
+                <h1>选择文件以查看</h1>
+                <p>从侧边栏选择一个文档开始阅读。</p>
+            </div>
+        </div>
+    </div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+    <script src="/vendor/katex/katex.min.js"></script>
+    <script src="/vendor/katex/contrib/auto-render.min.js"></script>
+    <script src="script.js"></script>
+    
+    <!-- Image Lightbox Modal -->
+    <div id="image-modal" class="modal">
+        <span class="close">&times;</span>
+        <img class="modal-content" id="img01">
+        <div id="caption"></div>
+    </div>
+</body>
+</html>
