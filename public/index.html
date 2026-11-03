@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#f7f9fc">
     <title>Markdown Viewer</title>
     <link rel="stylesheet" href="style.css">
@@ -13,7 +13,7 @@
         <script>
             // Apply the saved layout before the sidebar can be painted.
             (() => {
-                let collapsed = window.matchMedia('(max-width: 768px)').matches;
+                let collapsed = window.matchMedia('(max-width: 768px), (max-height: 768px) and (pointer: coarse)').matches;
                 try {
                     if (!collapsed) collapsed = localStorage.getItem('markdown-view.sidebar-collapsed.v1') === 'true';
                 } catch (_) { /* Keep the responsive default when storage is unavailable. */ }
@@ -51,6 +51,17 @@
                         <div class="tabs-overflow-heading">Open tabs <span id="tabs-overflow-count"></span></div>
                         <ul class="tabs-overflow-list" id="tabs-overflow-list"></ul>
                     </div>
+                </div>
+                <button class="landscape-toggle icon-button" id="landscape-toggle" type="button" aria-label="Enter landscape reading" aria-pressed="false" title="Enter landscape reading">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect class="landscape-phone" x="8" y="4" width="8" height="16" rx="2"/>
+                        <path d="M4 12a8 8 0 0 1 2-5.3M3 7l3-.3.3 3M20 12a8 8 0 0 1-2 5.3M21 17l-3 .3-.3-3"/>
+                    </svg>
+                    <span class="landscape-toggle-label">Landscape</span>
+                </button>
+                <div class="landscape-hint" id="landscape-hint" hidden>
+                    <span id="landscape-hint-text" role="status" aria-live="polite" aria-atomic="true"></span>
+                    <button class="landscape-hint-close icon-button" id="landscape-hint-close" type="button" aria-label="Dismiss rotation hint">×</button>
                 </div>
             </div>
             <article id="markdown-content" class="markdown-body" aria-live="polite">

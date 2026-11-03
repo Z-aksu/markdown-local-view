@@ -8,6 +8,8 @@ let activeAnchor = '';
 let persistTimer = null;
 let lastFocusedElement = null;
 let tabsLayoutFrame = null;
+const MOBILE_LAYOUT_QUERY = '(max-width: 768px), (max-height: 768px) and (pointer: coarse)';
+const isMobileLayout = () => window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
 
 const uiText = {
     selectFileTitle: 'Select a file to view',
@@ -25,7 +27,11 @@ const uiText = {
     closeDocument: 'Close document',
     closeImage: 'Close image preview',
     searchPlaceholder: 'Search files…',
-    tabLoading: 'Loading…'
+    tabLoading: 'Loading…',
+    enterLandscape: 'Enter landscape reading',
+    exitLandscape: 'Exit landscape reading',
+    landscapeHint: 'Turn your phone sideways to read in landscape. If the screen stays upright, enable auto-rotate in your phone settings.',
+    desktopLandscapeHint: "Landscape reading is available on phones and tablets. On desktop, use your browser's fullscreen option."
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -36,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupLightbox();
     setupSearch();
     setupTabs();
+    setupLandscapeReading();
     setupContentScrollMemory();
     renderTabs();
 
@@ -109,44 +116,183 @@ function handleHashChange() {
     document.querySelectorAll('.tree-item').forEach(element => element.classList.remove('active'));
 }
 
-function setupSidebar() {
+function setSidebarCollapsed(collapsed, { persist = true } = {}) {
     const container = document.querySelector('.container');
     const sidebar = document.getElementById('sidebar');
     const collapseButton = document.getElementById('sidebar-toggle');
     const expandButton = document.getElementById('content-sidebar-toggle');
     const mobileButton = document.getElementById('mobile-menu-toggle');
-    const backdrop = document.getElementById('sidebar-backdrop');
     if (!container || !sidebar) return;
+    container.classList.toggle('sidebar-collapsed', Boolean(collapsed));
+    const expanded = !collapsed;
+    collapseButton?.setAttribute('aria-expanded', String(expanded));
+    expandButton?.setAttribute('aria-expanded', String(expanded));
+    collapseButton?.setAttribute('aria-label', expanded ? uiText.collapseSidebar : uiText.expandSidebar);
+    expandButton?.setAttribute('aria-label', expanded ? uiText.collapseSidebar : uiText.expandSidebar);
+    mobileButton?.setAttribute('aria-expanded', String(expanded));
+    mobileButton?.setAttribute('aria-label', expanded ? uiText.closeMenu : uiText.openMenu);
+    if (persist && !isMobileLayout()) {
+        try { localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed)); } catch (_) { /* ignore */ }
+    }
+}
 
-    const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
-    let collapsed = isMobile();
+function setupSidebar() {
+    const container = document.querySelector('.container');
+    let collapsed = isMobileLayout();
     try {
-        if (!isMobile()) collapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+        if (!collapsed) collapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
     } catch (_) { /* localStorage may be unavailable */ }
+    document.getElementById('sidebar-toggle')?.addEventListener('click', () => setSidebarCollapsed(true));
+    document.getElementById('content-sidebar-toggle')?.addEventListener('click', () => setSidebarCollapsed(false));
+    document.getElementById('mobile-menu-toggle')?.addEventListener('click', () => setSidebarCollapsed(!container.classList.contains('sidebar-collapsed')));
+    document.getElementById('sidebar-backdrop')?.addEventListener('click', () => setSidebarCollapsed(true));
+    window.matchMedia(MOBILE_LAYOUT_QUERY).addEventListener('change', event => {
+        if (event.matches) setSidebarCollapsed(true, { persist: false });
+    });
+    setSidebarCollapsed(collapsed);
+}
 
-    const setCollapsed = next => {
-        collapsed = Boolean(next);
-        container.classList.toggle('sidebar-collapsed', collapsed);
-        const expanded = !collapsed;
-        collapseButton?.setAttribute('aria-expanded', String(expanded));
-        expandButton?.setAttribute('aria-expanded', String(expanded));
-        collapseButton?.setAttribute('aria-label', expanded ? uiText.collapseSidebar : uiText.expandSidebar);
-        expandButton?.setAttribute('aria-label', expanded ? uiText.collapseSidebar : uiText.expandSidebar);
-        mobileButton?.setAttribute('aria-expanded', String(expanded));
-        mobileButton?.setAttribute('aria-label', expanded ? uiText.closeMenu : uiText.openMenu);
-        if (!isMobile()) {
-            try { localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed)); } catch (_) { /* ignore */ }
+function setupLandscapeReading() {
+    const button = document.getElementById('landscape-toggle');
+    const container = document.querySelector('.container');
+    const content = document.querySelector('.content');
+    const hint = document.getElementById('landscape-hint');
+    const hintText = document.getElementById('landscape-hint-text');
+    const orientation = window.screen.orientation;
+    const landscape = window.matchMedia('(orientation: landscape)');
+    let session = null;
+    let pending = false;
+    let exiting = false;
+
+    const hideHint = () => {
+        hint.hidden = true;
+        hintText.textContent = '';
+        button.removeAttribute('aria-describedby');
+    };
+    const showHint = message => {
+        hint.hidden = false;
+        hintText.textContent = message;
+        button.setAttribute('aria-describedby', 'landscape-hint-text');
+    };
+    const updateButton = () => {
+        const label = session ? uiText.exitLandscape : uiText.enterLandscape;
+        button.setAttribute('aria-pressed', String(Boolean(session)));
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-busy', String(pending || exiting));
+        button.title = label;
+        button.querySelector('.landscape-toggle-label').textContent = session ? 'Exit' : 'Landscape';
+        // The active control stays usable to cancel an in-flight native request.
+        button.disabled = (pending || exiting) && !session;
+    };
+    const preserveScroll = change => {
+        const path = activePath;
+        const top = content.scrollTop;
+        change();
+        requestAnimationFrame(() => {
+            if (path === activePath) content.scrollTop = top;
+        });
+    };
+    const releaseNative = async current => {
+        current.usesFullscreen = false;
+        if (current.locked) {
+            current.locked = false;
+            try { orientation.unlock(); } catch (_) { /* The browser may already have released the lock. */ }
+        }
+        if (current.fullscreenOwned) {
+            current.fullscreenOwned = false;
+            if (document.fullscreenElement === document.documentElement) {
+                try { await document.exitFullscreen(); } catch (_) { /* Native fullscreen controls remain available. */ }
+            }
+        }
+    };
+    const exit = async () => {
+        const current = session;
+        if (!current) return;
+        session = null;
+        exiting = true;
+        hideHint();
+        preserveScroll(() => {
+            container.classList.remove('landscape-reading');
+            if (document.getElementById('search-input').value.trim()) applyTreeSearch();
+            setSidebarCollapsed(current.sidebarCollapsed, { persist: false });
+        });
+        updateButton();
+        await releaseNative(current);
+        exiting = false;
+        updateButton();
+    };
+    const enter = async () => {
+        // A narrow desktop window uses the mobile layout, but requesting
+        // fullscreen would immediately widen it and trigger layout cleanup.
+        if (!window.matchMedia('(pointer: coarse)').matches) {
+            closeTabsDropdown();
+            showHint(uiText.desktopLandscapeHint);
+            return;
+        }
+        const current = { sidebarCollapsed: container.classList.contains('sidebar-collapsed'), locked: false, fullscreenOwned: false, usesFullscreen: false };
+        session = current;
+        pending = true;
+        hideHint();
+        closeTabsDropdown();
+        preserveScroll(() => {
+            container.classList.add('landscape-reading');
+            if (document.getElementById('search-input').value.trim()) applyTreeSearch();
+            setSidebarCollapsed(true, { persist: false });
+        });
+        updateButton();
+        try {
+            // Request fullscreen directly while the click still has transient
+            // user activation, before awaiting any orientation operation.
+            if (!document.fullscreenElement && document.fullscreenEnabled && typeof document.documentElement.requestFullscreen === 'function') {
+                try {
+                    await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+                    current.fullscreenOwned = document.fullscreenElement === document.documentElement;
+                } catch (_) { /* Keep in-page reading available if fullscreen is denied. */ }
+            }
+            if (session !== current) return;
+            current.usesFullscreen = Boolean(document.fullscreenElement);
+            if (typeof orientation?.lock === 'function' && typeof orientation?.unlock === 'function') {
+                await orientation.lock('landscape');
+                current.locked = true;
+            }
+        } catch (_) {
+            // A failed direction lock must not discard a usable fullscreen reader.
+        } finally {
+            if (session !== current) await releaseNative(current);
+            pending = false;
+            updateButton();
+            if (session === current && !current.locked && !landscape.matches) {
+                showHint(uiText.landscapeHint);
+            }
         }
     };
 
-    collapseButton?.addEventListener('click', () => setCollapsed(true));
-    expandButton?.addEventListener('click', () => setCollapsed(false));
-    mobileButton?.addEventListener('click', () => setCollapsed(!collapsed));
-    backdrop?.addEventListener('click', () => setCollapsed(true));
-    window.addEventListener('resize', () => {
-        if (isMobile() && !container.classList.contains('sidebar-collapsed')) setCollapsed(true);
+    button.addEventListener('click', () => { if (session) void exit(); else if (!pending && !exiting) void enter(); });
+    document.getElementById('landscape-hint-close').addEventListener('click', () => {
+        hideHint();
+        button.focus({ preventScroll: true });
     });
-    setCollapsed(collapsed);
+    landscape.addEventListener('change', event => { if (event.matches) hideHint(); });
+    window.matchMedia(MOBILE_LAYOUT_QUERY).addEventListener('change', event => {
+        if (!event.matches) { hideHint(); void exit(); }
+    });
+    document.addEventListener('fullscreenchange', () => {
+        if (session?.usesFullscreen && !document.fullscreenElement) void exit();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || event.defaultPrevented || document.getElementById('image-modal').getAttribute('aria-hidden') === 'false') return;
+        if (!hint.hidden) {
+            event.preventDefault();
+            hideHint();
+            button.focus({ preventScroll: true });
+        } else if (session) {
+            event.preventDefault();
+            void exit();
+            button.focus({ preventScroll: true });
+        }
+    });
+    window.addEventListener('pagehide', () => { void exit(); });
+    updateButton();
 }
 
 function activateTab(path) {
@@ -578,16 +724,26 @@ async function loadContent(tab) {
 function setupSearch() {
     const searchInput = document.getElementById('search-input');
     let searchFrame = null;
-    searchInput.addEventListener('input', event => {
-        const query = event.target.value.toLocaleLowerCase().trim();
+    searchInput.addEventListener('input', () => {
         if (searchFrame !== null) cancelAnimationFrame(searchFrame);
         searchFrame = requestAnimationFrame(() => {
             searchFrame = null;
-            const treeRoot = document.getElementById('file-tree');
-            if (!query) { resetTree(treeRoot); return; }
-            filterTree(treeRoot, query);
+            applyTreeSearch();
         });
     });
+}
+
+function applyTreeSearch() {
+    const treeRoot = document.getElementById('file-tree');
+    // A hidden search field must not leave the drawer silently filtered. Keep
+    // the query and folder expansion so both remain available after leaving.
+    if (document.querySelector('.container').classList.contains('landscape-reading')) {
+        treeRoot.querySelectorAll('.tree-item').forEach(item => item.style.removeProperty('display'));
+        return;
+    }
+    const query = document.getElementById('search-input').value.toLocaleLowerCase().trim();
+    if (!query) resetTree(treeRoot);
+    else filterTree(treeRoot, query);
 }
 
 function filterTree(container, query) {
