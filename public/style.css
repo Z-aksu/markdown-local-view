@@ -205,7 +205,7 @@ body.modal-open { overflow: hidden; }
     .container.sidebar-collapsed .sidebar { width: min(86vw, 340px) !important; transform: translateX(-105%); opacity: 1; }
     .container.sidebar-collapsed .content { width: 100%; }
     .sidebar-backdrop { position: fixed; inset: 0; z-index: 19; display: block; background: rgba(15, 23, 42, .35); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
-    .container:not(.sidebar-collapsed) .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+    .container:not(.sidebar-collapsed) + .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .resizer { display: none; }
     .mobile-menu-toggle { display: inline-flex; }
     .content-sidebar-toggle { display: none !important; }
