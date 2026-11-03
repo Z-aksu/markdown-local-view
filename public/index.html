@@ -3,51 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markdown 文档服务</title>
+    <meta name="theme-color" content="#f7f9fc">
+    <title>Markdown Viewer</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 </head>
 <body>
     <div class="container">
-        <div class="sidebar" id="sidebar">
+        <script>
+            // Apply the saved layout before the sidebar can be painted.
+            (() => {
+                let collapsed = window.matchMedia('(max-width: 768px)').matches;
+                try {
+                    if (!collapsed) collapsed = localStorage.getItem('markdown-view.sidebar-collapsed.v1') === 'true';
+                } catch (_) { /* Keep the responsive default when storage is unavailable. */ }
+                document.currentScript.parentElement.classList.toggle('sidebar-collapsed', collapsed);
+            })();
+        </script>
+        <aside class="sidebar" id="sidebar" aria-label="Document tree">
             <div class="sidebar-header">
                 <div class="sidebar-heading">
-                    <div class="title">本地文档管理</div>
-                    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-controls="sidebar" aria-expanded="true">
+                    <div class="title">Local Documents</div>
+                    <button class="sidebar-toggle icon-button" id="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-controls="sidebar" aria-expanded="true">
                         <span aria-hidden="true">‹</span>
                     </button>
                 </div>
-                <input type="text" id="search-input" placeholder="Search files...">
+                <label class="search-label" for="search-input">Search documents</label>
+                <input type="search" id="search-input" placeholder="Search files…" autocomplete="off" spellcheck="false">
             </div>
-            <div id="file-tree"></div>
-        </div>
-        <div class="resizer" id="drag-resizer"></div>
-        <div class="content">
+            <div id="file-tree" class="file-tree" aria-live="polite"></div>
+        </aside>
+        <div class="resizer" id="drag-resizer" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" tabindex="0"></div>
+        <main class="content">
             <div class="content-toolbar">
-                <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="Open document menu" aria-controls="sidebar" aria-expanded="false">
-                    <span aria-hidden="true">☰</span><span class="mobile-menu-label">菜单</span>
+                <button class="mobile-menu-toggle icon-button" id="mobile-menu-toggle" type="button" aria-label="Open document menu" aria-controls="sidebar" aria-expanded="false">
+                    <span aria-hidden="true">☰</span><span class="mobile-menu-label">Menu</span>
                 </button>
-                <button class="content-sidebar-toggle" id="content-sidebar-toggle" type="button" aria-label="Expand sidebar" aria-controls="sidebar" aria-expanded="false">
+                <button class="content-sidebar-toggle icon-button" id="content-sidebar-toggle" type="button" aria-label="Expand sidebar" aria-controls="sidebar" aria-expanded="false">
                     <span aria-hidden="true">›</span>
                 </button>
-                <div id="tabs" class="tabs" role="tablist" aria-label="打开 本地文档管理"></div>
+                <div id="tabs" class="tabs" role="tablist" aria-label="Open documents"></div>
+                <div class="tabs-overflow" id="tabs-overflow" hidden>
+                    <button class="tabs-overflow-toggle icon-button" id="tabs-overflow-toggle" type="button" aria-label="Open tabs" aria-controls="tabs-overflow-panel" aria-expanded="false" title="Open tabs">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="tabs-overflow-panel" id="tabs-overflow-panel" aria-labelledby="tabs-overflow-toggle" hidden>
+                        <div class="tabs-overflow-heading">Open tabs <span id="tabs-overflow-count"></span></div>
+                        <ul class="tabs-overflow-list" id="tabs-overflow-list"></ul>
+                    </div>
+                </div>
             </div>
-            <div id="markdown-content">
-                <h1>选择文件以查看</h1>
-                <p>从侧边栏选择一个文档开始阅读。</p>
-            </div>
-        </div>
+            <article id="markdown-content" class="markdown-body" aria-live="polite">
+                <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">▤</span>
+                    <h1>Select a file to view</h1>
+                    <p>Choose a Markdown document from the sidebar to start reading.</p>
+                </div>
+            </article>
+        </main>
     </div>
     <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+    <div id="image-modal" class="modal" role="dialog" aria-modal="true" aria-label="Image preview" aria-hidden="true">
+        <button class="close icon-button" type="button" aria-label="Close image preview">×</button>
+        <img class="modal-content" id="img01" alt="">
+        <div id="caption"></div>
+    </div>
     <script src="/vendor/katex/katex.min.js"></script>
     <script src="/vendor/katex/contrib/auto-render.min.js"></script>
     <script src="script.js"></script>
-    
-    <!-- Image Lightbox Modal -->
-    <div id="image-modal" class="modal">
-        <span class="close">&times;</span>
-        <img class="modal-content" id="img01">
-        <div id="caption"></div>
-    </div>
 </body>
 </html>

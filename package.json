@@ -1,27 +1,15 @@
 {
   "name": "markdown-view",
   "version": "1.0.0",
-  "description": "A CLI tool to view markdown files in a directory tree structure",
+  "description": "A CLI tool to view Markdown files in a directory tree structure",
   "main": "src/server.js",
-  "bin": {
-    "md-view": "./bin/doc-server.js"
-  },
+  "bin": { "md-view": "./bin/doc-server.js" },
   "scripts": {
     "start": "node bin/doc-server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
-  "files": [
-    "bin",
-    "src",
-    "public"
-  ],
-  "keywords": [
-    "markdown",
-    "cli",
-    "server",
-    "documentation",
-    "viewer"
-  ],
+  "files": ["bin", "src", "public"],
+  "keywords": ["markdown", "cli", "server", "documentation", "viewer"],
   "author": "",
   "license": "ISC",
   "dependencies": {
