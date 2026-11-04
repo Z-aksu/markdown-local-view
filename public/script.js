@@ -8,8 +8,13 @@ let activeAnchor = '';
 let persistTimer = null;
 let lastFocusedElement = null;
 let tabsLayoutFrame = null;
+let contentRenderId = 0;
+let scrollMemoryPath = null;
+let pendingContentRestore = null;
 const MOBILE_LAYOUT_QUERY = '(max-width: 768px), (max-height: 768px) and (pointer: coarse)';
 const isMobileLayout = () => window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+
+if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
 
 const uiText = {
     selectFileTitle: 'Select a file to view',
@@ -66,6 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 window.addEventListener('beforeunload', persistTabs);
+window.addEventListener('pagehide', persistTabs);
 window.addEventListener('hashchange', handleHashChange);
 
 function getHashState() {
@@ -91,6 +97,9 @@ function getHashPath() {
 }
 
 function setEmptyState() {
+    contentRenderId++;
+    scrollMemoryPath = null;
+    pendingContentRestore = null;
     document.getElementById('markdown-content').innerHTML = `
         <div class="empty-state">
             <span class="empty-state-icon" aria-hidden="true">▤</span>
@@ -296,6 +305,7 @@ function setupLandscapeReading() {
 }
 
 function activateTab(path) {
+    rememberContentScroll();
     let tab = tabs.get(path);
     if (!tab) {
         tab = { path, title: path.split('/').pop(), html: null, scrollTop: 0, loading: true, requested: true };
@@ -356,7 +366,9 @@ function removeMissingTabs(items) {
 }
 
 function persistTabs() {
+    if (persistTimer !== null) window.clearTimeout(persistTimer);
     persistTimer = null;
+    rememberContentScroll();
     try {
         localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify({
             activePath,
@@ -559,16 +571,57 @@ function setupTabsDropdown() {
 }
 
 function renderTabContent(tab) {
+    rememberContentScroll();
+    const renderId = ++contentRenderId;
+    scrollMemoryPath = null;
+    pendingContentRestore = null;
     const contentDiv = document.getElementById('markdown-content');
     contentDiv.innerHTML = tab.loading ? `<div class="loading-state"><span class="loading-spinner" aria-hidden="true"></span>${uiText.loading}</div>` : tab.html;
     renderMath(contentDiv);
     attachImageListeners();
-    requestAnimationFrame(() => {
+    if (tab.loading) return;
+
+    const restore = { renderId, path: tab.path };
+    pendingContentRestore = restore;
+    const isCurrent = () => pendingContentRestore === restore && activePath === tab.path && renderId === contentRenderId;
+    const applyPosition = () => {
+        if (!isCurrent()) return;
         const content = document.querySelector('.content');
         content.scrollTop = tab.scrollTop || 0;
         if (activeAnchor && activePath === tab.path) {
             document.getElementById(activeAnchor)?.scrollIntoView({ block: 'start' });
         }
+    };
+    const images = Array.from(contentDiv.querySelectorAll('img')).filter(image => !image.complete);
+    let remainingImages = images.length;
+    const imageSettled = () => {
+        if (!isCurrent()) return;
+        remainingImages--;
+        requestAnimationFrame(applyPosition);
+        if (remainingImages === 0) requestAnimationFrame(finishRestore);
+    };
+    const finishRestore = () => {
+        if (!isCurrent()) return;
+        applyPosition();
+        pendingContentRestore = null;
+        scrollMemoryPath = tab.path;
+        rememberContentScroll();
+        schedulePersistTabs();
+    };
+    images.forEach(image => {
+        let settled = false;
+        const onSettled = () => {
+            if (settled) return;
+            settled = true;
+            imageSettled();
+        };
+        image.addEventListener('load', onSettled, { once: true });
+        image.addEventListener('error', onSettled, { once: true });
+        if (image.complete) onSettled();
+    });
+    requestAnimationFrame(() => {
+        applyPosition();
+        if (remainingImages === 0) requestAnimationFrame(finishRestore);
     });
 }
 
@@ -808,16 +861,31 @@ function setupResizer() {
     });
 }
 
+function rememberContentScroll() {
+    if (!activePath || scrollMemoryPath !== activePath) return false;
+    const tab = tabs.get(activePath);
+    if (!tab || tab.loading) return false;
+    tab.scrollTop = document.querySelector('.content').scrollTop;
+    return true;
+}
+
 function setupContentScrollMemory() {
     const content = document.querySelector('.content');
-    let scrollFrame = null;
+    const cancelRestore = () => {
+        if (!pendingContentRestore) return;
+        scrollMemoryPath = pendingContentRestore.path;
+        pendingContentRestore = null;
+        rememberContentScroll();
+        schedulePersistTabs();
+    };
+    content.addEventListener('pointerdown', cancelRestore);
+    content.addEventListener('wheel', cancelRestore);
+    content.addEventListener('touchstart', cancelRestore);
+    document.addEventListener('keydown', event => {
+        if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) cancelRestore();
+    });
     content.addEventListener('scroll', () => {
-        if (!activePath || scrollFrame !== null) return;
-        scrollFrame = requestAnimationFrame(() => {
-            scrollFrame = null;
-            const tab = tabs.get(activePath);
-            if (tab) { tab.scrollTop = content.scrollTop; schedulePersistTabs(); }
-        });
+        if (rememberContentScroll()) schedulePersistTabs();
     });
 }
 
